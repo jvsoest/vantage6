@@ -1,0 +1,14 @@
+apiVersion: v2
+name: vantage6-node
+description: >-
+  vantage6 node that runs algorithms as Kubernetes Jobs. Works on plain Kubernetes,
+  managed Kubernetes and OpenShift, without host paths or privileged containers.
+type: application
+version: 0.1.0
+appVersion: "4.15"
+home: https://vantage6.ai
+sources:
+  - https://github.com/vantage6/vantage6
+keywords:
+  - vantage6
+  - federated-learning

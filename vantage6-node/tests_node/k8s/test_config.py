@@ -22,6 +22,34 @@ class TestKubernetesConfig(unittest.TestCase):
         self.assertEqual(config.job.image_pull_timeout_seconds, 300)
         self.assertFalse(config.algorithm_pod.co_locate_with_node)
 
+    def test_null_settings_get_defaults(self):
+        config = KubernetesConfig.from_node_config(
+            {
+                "kubernetes": {
+                    "namespace": "ns",
+                    "task_pvc": "tasks",
+                    "image_pull_secrets": None,
+                    "job": {"ttl_seconds_after_finished": None},
+                    "algorithm_pod": {"resources": None},
+                }
+            }
+        )
+        self.assertEqual(config.image_pull_secrets, [])
+        self.assertEqual(config.job.ttl_seconds_after_finished, 86400)
+        self.assertEqual(config.algorithm_pod.resources, {})
+
+    def test_co_location_requires_node_pod_labels(self):
+        with self.assertRaises(KubernetesConfigError):
+            KubernetesConfig.from_node_config(
+                {
+                    "kubernetes": {
+                        "namespace": "ns",
+                        "task_pvc": "tasks",
+                        "algorithm_pod": {"co_locate_with_node": True},
+                    }
+                }
+            )
+
     def test_nested_settings(self):
         config = KubernetesConfig.from_node_config(
             {

@@ -1,0 +1,16 @@
+# Algorithms reach the vantage6 server through the proxy server of the node
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "node.proxyServiceName" . }}
+  labels:
+    {{- include "node.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "node.podSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: proxy
+      port: {{ .Values.proxy.port }}
+      targetPort: proxy
+      protocol: TCP

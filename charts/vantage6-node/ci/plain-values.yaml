@@ -1,0 +1,34 @@
+node:
+  serverUrl: https://server.example
+  apiKey: api-key
+  databases:
+    - label: default
+      type: csv
+      uri: data.csv
+      mount_mode: ro
+      volume:
+        claim_name: research-data
+        sub_path: study-1
+    - label: omop
+      type: omop
+      uri: postgresql://omop.data.svc:5432/omop
+  registries:
+    - registry: registry.example.com
+      username: user
+      password: secret
+  policies:
+    allowed_algorithms:
+      - ^ghcr\.io/vantage6/.*
+taskVolume:
+  storageClass: nfs
+algorithms:
+  resources:
+    limits:
+      memory: 2Gi
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.12.0/24
+      ports:
+        - protocol: TCP
+          port: 5432

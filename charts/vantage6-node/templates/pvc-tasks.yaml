@@ -1,0 +1,24 @@
+{{- if not .Values.taskVolume.existingClaim }}
+{{- if eq .Values.taskVolume.accessMode "ReadWriteOncePod" }}
+{{- fail "taskVolume.accessMode ReadWriteOncePod is not supported: the node and algorithm pods share the task volume" }}
+{{- end }}
+# Input, output and token files of algorithm runs, shared by the node and the
+# algorithm pods
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "node.taskPvcName" . }}
+  labels:
+    {{- include "node.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ .Values.taskVolume.accessMode }}
+  {{- with .Values.taskVolume.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.taskVolume.size }}
+{{- end }}

@@ -1,0 +1,5 @@
+node:
+  serverUrl: https://server.example
+  apiKey: api-key
+taskVolume:
+  accessMode: ReadWriteOnce

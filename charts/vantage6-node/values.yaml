@@ -1,0 +1,164 @@
+# Default values for the vantage6 node chart.
+#
+# The node runs as a single pod and starts every algorithm run as a Kubernetes Job
+# in the same namespace. Install each node in a dedicated namespace.
+
+image:
+  repository: ghcr.io/vantage6/infrastructure/node
+  # defaults to the appVersion of the chart
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# pull secrets for the node image
+imagePullSecrets: []
+
+node:
+  # URL of the vantage6 server, port and API path
+  serverUrl: ""
+  port: 443
+  apiPath: /api
+
+  # API key of the node. Alternatively, provide an existing secret.
+  apiKey: ""
+  existingApiKeySecret:
+    name: ""
+    key: api-key
+
+  encryption:
+    enabled: false
+    # PEM encoded private key of the organization. Alternatively, provide an
+    # existing secret.
+    privateKey: ""
+    existingSecret:
+      name: ""
+      key: private-key.pem
+
+  # Databases that algorithms can use. Same format as in the node configuration
+  # file, with these options for Kubernetes:
+  #
+  # - Service database (e.g. a SQL server): set `uri` to the connection string and
+  #   allow algorithms to reach it in `algorithms.egress`.
+  # - File or folder on an existing persistent volume claim, mounted read-only in
+  #   the algorithm pods: set `mount_mode: ro`, `volume.claim_name` and optionally
+  #   `volume.sub_path`; `uri` is the path relative to the root of the claim (or
+  #   sub_path).
+  # - File copied to the task volume when the node starts (mount_mode `copy`,
+  #   the default): as above, but without `mount_mode: ro`.
+  #
+  # databases:
+  #   - label: default
+  #     type: csv
+  #     uri: data.csv
+  #     mount_mode: ro
+  #     volume:
+  #       claim_name: research-data
+  #       sub_path: study-1
+  #   - label: omop
+  #     type: omop
+  #     uri: postgresql://omop.data.svc.cluster.local:5432/omop
+  #     env:
+  #       user: vantage6
+  databases: []
+
+  # Node policies, e.g. allowed_algorithms. See the node configuration docs.
+  policies: {}
+
+  # Credentials for private registries. Used for policy checks and to pull
+  # algorithm images (a pull secret is created from them).
+  # registries:
+  #   - registry: registry.example.com
+  #     username: user
+  #     password: secret
+  registries: []
+  # Existing pull secrets for algorithm images, in addition to `registries`
+  existingImagePullSecrets: []
+
+  algorithmEnv: {}
+  shareAlgorithmLogs: true
+  shareConfig: true
+  runContextFile: false
+
+  logging:
+    level: INFO
+
+  # Additional node configuration options, merged into the configuration file
+  extraConfig: {}
+
+  # Use an existing secret with a complete node configuration file (key
+  # `config.yaml`) instead of the configuration generated from these values.
+  existingConfigSecret: ""
+
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Persistent volume claim that holds the input, output and token files of the
+# algorithm runs. It is mounted by the node and by the algorithm pods, so it should
+# support ReadWriteMany (e.g. NFS, CephFS, Azure Files, EFS). With ReadWriteOnce,
+# algorithm pods are scheduled on the same Kubernetes node as the node pod.
+taskVolume:
+  existingClaim: ""
+  storageClass: ""
+  accessMode: ReadWriteMany
+  size: 10Gi
+
+algorithms:
+  # Service account (without any permissions) for the algorithm pods
+  serviceAccount:
+    create: true
+    name: ""
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  readOnlyRootFilesystem: false
+  gpuResourceName: nvidia.com/gpu
+  job:
+    ttlSecondsAfterFinished: 86400
+    activeDeadlineSeconds: null
+    imagePullTimeoutSeconds: 300
+    pendingTimeoutSeconds: null
+    keepOnShutdown: true
+  # NetworkPolicy egress rules that allow algorithms to reach services, e.g.
+  # service databases. Algorithms can always reach the node proxy and DNS.
+  # egress:
+  #   - to:
+  #       - ipBlock:
+  #           cidr: 10.0.12.0/24
+  #     ports:
+  #       - protocol: TCP
+  #         port: 5432
+  egress: []
+
+# Security context of the node and the algorithm pods. Ignored on OpenShift, which
+# assigns the user and group per namespace. The node and algorithm pods must run
+# with the same user or group to share the task files.
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+openshift:
+  # "auto" detects OpenShift from the available APIs; or set true / false
+  enabled: auto
+
+proxy:
+  port: 8080
+
+networkPolicy:
+  enabled: true
+  # Where cluster DNS runs. Overridden with the OpenShift DNS on OpenShift.
+  dns:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: kube-system
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+    ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53

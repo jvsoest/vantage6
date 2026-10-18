@@ -123,10 +123,12 @@ class KubernetesConfig:
         KubernetesConfigError
             If the settings are invalid
         """
-        k8s = dict(config.get("kubernetes") or {})
+        k8s = _without_nulls(config.get("kubernetes"))
         try:
-            job = JobConfig(**(k8s.pop("job", None) or {}))
-            algorithm_pod = AlgorithmPodConfig(**(k8s.pop("algorithm_pod", None) or {}))
+            job = JobConfig(**_without_nulls(k8s.pop("job", None)))
+            algorithm_pod = AlgorithmPodConfig(
+                **_without_nulls(k8s.pop("algorithm_pod", None))
+            )
         except TypeError as exc:
             raise KubernetesConfigError(f"Invalid kubernetes configuration: {exc}")
 
@@ -161,6 +163,11 @@ class KubernetesConfig:
                 "'kubernetes.node_pod_labels' to select the node pod."
             )
         return config
+
+
+def _without_nulls(settings: dict | None) -> dict:
+    """Settings without the ones that are null, so that their defaults apply"""
+    return {key: value for key, value in (settings or {}).items() if value is not None}
 
 
 def _current_namespace() -> str | None:

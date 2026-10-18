@@ -1,0 +1,22 @@
+The vantage6 node {{ include "node.fullname" . }} has been installed in namespace
+{{ .Release.Namespace }}. It runs algorithms as Kubernetes Jobs in this namespace.
+
+Follow the node logs with:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "node.fullname" . }} -f
+
+{{- if eq (include "node.openshift" .) "true" }}
+
+OpenShift detected: the node and algorithm pods run with the user and group that
+OpenShift assigns to the namespace.
+{{- end }}
+{{- if ne .Values.taskVolume.accessMode "ReadWriteMany" }}
+
+The task volume is not ReadWriteMany, so algorithm pods are scheduled on the same
+Kubernetes node as the node pod.
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+
+Algorithms are isolated with NetworkPolicies. Make sure that the network plugin of
+your cluster enforces NetworkPolicies, otherwise algorithms are not isolated.
+{{- end }}

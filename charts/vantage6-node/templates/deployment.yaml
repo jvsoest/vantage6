@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "node.fullname" . }}
+  labels:
+    {{- include "node.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node
+spec:
+  # a node can only run once: it authenticates with a single API key
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "node.podSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "node.podSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "node.config" . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "node.fullname" . }}
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "node.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: node
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - vnode-local
+            - start
+            - --config
+            - /mnt/config/{{ .Release.Name }}.yaml
+            - --runtime
+            - kubernetes
+          env:
+            - name: V6_NODE_RUNTIME
+              value: kubernetes
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: PROXY_SERVER_HOST
+              value: {{ printf "%s.%s.svc" (include "node.proxyServiceName" .) .Release.Namespace }}
+            - name: PROXY_SERVER_PORT
+              value: {{ .Values.proxy.port | quote }}
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: proxy
+              containerPort: {{ .Values.proxy.port }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: proxy
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: proxy
+            # the node may take a while to authenticate with the server
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          {{- with .Values.node.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /mnt/config
+              readOnly: true
+            - name: tasks
+              mountPath: /mnt/data
+            - name: logs
+              mountPath: /mnt/log
+            - name: tmp
+              mountPath: /tmp
+            {{- range include "node.databaseVolumes" . | fromYamlArray }}
+            - name: database-{{ .label | lower | replace "_" "-" }}
+              mountPath: /mnt/databases/{{ .label }}
+              {{- with .subPath }}
+              subPath: {{ . }}
+              {{- end }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: config
+          projected:
+            sources:
+              - secret:
+                  name: {{ include "node.configSecretName" . }}
+                  items:
+                    - key: config.yaml
+                      path: {{ .Release.Name }}.yaml
+              {{- if .Values.node.encryption.enabled }}
+              - secret:
+                  name: {{ include "node.privateKeySecretName" . }}
+                  items:
+                    - key: {{ .Values.node.encryption.existingSecret.key }}
+                      path: private_key.pem
+              {{- end }}
+        - name: tasks
+          persistentVolumeClaim:
+            claimName: {{ include "node.taskPvcName" . }}
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- range include "node.databaseVolumes" . | fromYamlArray }}
+        - name: database-{{ .label | lower | replace "_" "-" }}
+          persistentVolumeClaim:
+            claimName: {{ .claim }}
+            readOnly: true
+        {{- end }}
+      {{- with .Values.node.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.node.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.node.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

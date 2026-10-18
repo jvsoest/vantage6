@@ -1,0 +1,11 @@
+openshift:
+  enabled: true
+node:
+  serverUrl: https://server.example
+  apiKey: api-key
+  encryption:
+    enabled: true
+    privateKey: |
+      -----BEGIN PRIVATE KEY-----
+      dummy
+      -----END PRIVATE KEY-----

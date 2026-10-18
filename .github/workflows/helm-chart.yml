@@ -1,0 +1,34 @@
+name: Helm chart
+
+on:
+  push:
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm-chart.yml"
+  pull_request:
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm-chart.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+      - name: Lint and validate the node chart
+        working-directory: charts/vantage6-node
+        run: |
+          for values in ci/*-values.yaml; do
+            echo "::group::$values"
+            helm lint . -f "$values"
+            helm template node . -n vantage6 -f "$values" \
+              | kubeconform -strict -summary -
+            echo "::endgroup::"
+          done
