@@ -35,6 +35,7 @@ setup(
         "docker==7.1.0",
         "gevent==25.4.2",
         "jinja2==3.1.6",
+        "kubernetes==31.0.0",
         "python-socketio==5.15.0",
         "requests==2.33.1",
         "psutil==5.9.0",

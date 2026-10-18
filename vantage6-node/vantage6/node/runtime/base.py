@@ -133,6 +133,12 @@ class TaskRuntime(ABC):
         """Number of algorithm runs that are currently running"""
         return len(self.active_tasks)
 
+    def _refresh_state(self) -> None:
+        """
+        Hook that is called before checking whether active runs have finished,
+        e.g. to observe the state of all runs at once.
+        """
+
     def _on_run_finished(self, task) -> None:
         """
         Hook that is called when a run has finished and its results are read.
@@ -246,6 +252,13 @@ class TaskRuntime(ABC):
         """
         finished_tasks = []
         while (not finished_tasks) and (not self.failed_tasks):
+            if self.active_tasks:
+                try:
+                    self._refresh_state()
+                except Exception:
+                    self.log.exception("Could not observe the state of active runs")
+                    time.sleep(self.poll_interval)
+                    continue
             for task in self.active_tasks:
                 try:
                     if task.is_finished():

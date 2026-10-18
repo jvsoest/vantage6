@@ -146,7 +146,7 @@ class KubernetesConfig:
         if "task_volume_mount_path" in k8s:
             k8s["task_volume_mount_path"] = Path(k8s["task_volume_mount_path"])
         try:
-            return cls(
+            config = cls(
                 namespace=namespace,
                 task_pvc=task_pvc,
                 job=job,
@@ -155,6 +155,12 @@ class KubernetesConfig:
             )
         except TypeError as exc:
             raise KubernetesConfigError(f"Invalid kubernetes configuration: {exc}")
+        if config.algorithm_pod.co_locate_with_node and not config.node_pod_labels:
+            raise KubernetesConfigError(
+                "'kubernetes.algorithm_pod.co_locate_with_node' requires "
+                "'kubernetes.node_pod_labels' to select the node pod."
+            )
+        return config
 
 
 def _current_namespace() -> str | None:
