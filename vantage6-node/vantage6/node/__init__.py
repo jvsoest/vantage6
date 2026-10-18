@@ -181,7 +181,7 @@ class Node:
 
         # setup the docker manager
         self.log.debug("Setting up the docker manager")
-        self.__docker = DockerManager(
+        self.__runtime = DockerManager(
             ctx=self.ctx,
             isolated_network_mgr=isolated_network_mgr,
             vpn_manager=self.vpn_manager,
@@ -256,7 +256,7 @@ class Node:
         metadata = {
             "cpu_percent": psutil.cpu_percent(interval=1),
             "memory_percent": psutil.virtual_memory().percent,
-            "num_algorithm_containers": len(self.__docker.active_tasks),
+            "num_algorithm_containers": self.__runtime.num_active_tasks(),
             "os": os.name,
             "platform": sys.platform,
             "cpu_count": psutil.cpu_count(),
@@ -420,7 +420,7 @@ class Node:
         """
         for task_result in task_results:
             try:
-                if not self.__docker.is_running(task_result["id"]):
+                if not self.__runtime.is_running(task_result["id"]):
                     self.queue.put(task_result)
                 else:
                     self.log.info(
@@ -466,9 +466,8 @@ class Node:
             )
             return  # prevent starting the run if there is no token
 
-        # create a temporary volume for each job_id
-        vol_name = self.ctx.docker_temporary_volume_name(task["job_id"])
-        self.__docker.create_volume(vol_name)
+        # create temporary storage (e.g. a docker volume) for each job_id
+        vol_name = self.__runtime.prepare_job_storage(task["job_id"])
 
         # For some reason, if the key 'input' consists of JSON, it is
         # automatically marshalled? This causes trouble, so we'll serialize it
@@ -478,8 +477,8 @@ class Node:
             task_incl_run["input"] = json.dumps(task_incl_run["input"])
 
         # Run the container. This adds the created container/task to the list
-        # __docker.active_tasks
-        task_status, vpn_ports = self.__docker.run(
+        # __runtime.active_tasks
+        task_status, vpn_ports = self.__runtime.run(
             run_id=task_incl_run["id"],
             task_info=task,
             image=task["image"],
@@ -573,7 +572,7 @@ class Node:
 
         while True:
             try:
-                results = self.__docker.get_result()
+                results = self.__runtime.get_result()
 
                 # notify socket channel of algorithm status change
                 self.socketIO.emit(
@@ -1065,7 +1064,7 @@ class Node:
             return
         self.log.info("Linking docker services specified in the configuration")
         for alias, container_name in docker_services.items():
-            self.__docker.link_container_to_network(
+            self.__runtime.link_container_to_network(
                 container_name=container_name, config_alias=alias
             )
 
@@ -1197,7 +1196,7 @@ class Node:
 
         # kill specific task if specified, else kill all algorithms
         kill_list = kill_info.get("kill_list")
-        killed_algos = self.__docker.kill_tasks(
+        killed_algos = self.__runtime.kill_tasks(
             org_id=self.client.whoami.organization_id, kill_list=kill_list
         )
         # update status of killed tasks
@@ -1252,7 +1251,7 @@ class Node:
             labels.append(label)
             types[f"db_type_{label}"] = type_
             if type_ in ("csv", "parquet"):
-                col_names[f"columns_{label}"] = self.__docker.get_column_names(
+                col_names[f"columns_{label}"] = self.__runtime.get_column_names(
                     label, type_
                 )
         config_to_share["database_labels"] = labels
@@ -1290,11 +1289,11 @@ class Node:
                 except Exception:
                     self.log.exception("Error stopping SSH tunnel during cleanup")
 
-        if hasattr(self, "_Node__docker") and self.__docker:
+        if hasattr(self, "_Node__runtime") and self.__runtime:
             try:
-                self.__docker.cleanup()
+                self.__runtime.cleanup()
             except Exception:
-                self.log.exception("Error cleaning up Docker manager during cleanup")
+                self.log.exception("Error cleaning up container runtime during cleanup")
 
         self.log.info("Bye!")
 
