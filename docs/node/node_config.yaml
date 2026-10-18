@@ -326,3 +326,18 @@ prometheus:
   # Interval (in seconds) at which the node sends system metadata to the server.
   # This should align with the Prometheus scrape_interval to avoid stale data.
   report_interval_seconds: 45
+
+# Container runtime that the node uses to run algorithms: 'docker' (default) or
+# 'kubernetes'. Kubernetes nodes are usually installed with the Helm chart, which
+# generates this configuration. See the documentation on running a node on
+# Kubernetes for all options of the `kubernetes` section.
+# OPTIONAL
+runtime: docker
+# kubernetes:
+#   task_pvc: my-node-tasks
+#   job:
+#     active_deadline_seconds: 86400
+#   algorithm_pod:
+#     resources:
+#       limits:
+#         memory: 4Gi

@@ -1,0 +1,35 @@
+# Two organizations in one collaboration: one with a Kubernetes node and one with
+# a docker node
+organizations:
+  - name: k8s-org
+    domain: k8s.example
+    address1: Street 1
+    address2: ""
+    zipcode: 1234AB
+    country: Netherlands
+    public_key: ""
+    users:
+      - username: admin
+        firstname: admin
+        lastname: robot
+        password: Password123!
+  - name: docker-org
+    domain: docker.example
+    address1: Street 1
+    address2: ""
+    zipcode: 1234AB
+    country: Netherlands
+    public_key: ""
+    users:
+      - username: docker-admin
+        firstname: admin
+        lastname: robot
+        password: Password123!
+collaborations:
+  - name: mixed
+    encrypted: false
+    participants:
+      - name: k8s-org
+        api_key: 11111111-1111-4111-8111-111111111111
+      - name: docker-org
+        api_key: 22222222-2222-4222-8222-222222222222

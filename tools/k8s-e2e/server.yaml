@@ -1,0 +1,17 @@
+# vantage6 server configuration for end-to-end testing
+description: e2e server
+ip: 0.0.0.0
+port: 80
+api_path: /api
+uri: sqlite:////tmp/e2e.sqlite
+allow_drop_all: true
+jwt_secret_key: e2e-secret-key-that-is-long-enough-for-hs256
+server_url: http://v6-e2e-server/api
+logging:
+  level: INFO
+  file: server.log
+  use_console: true
+  backup_count: 5
+  max_size: 1024
+  format: "%(asctime)s - %(name)-14s - %(levelname)-8s - %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"

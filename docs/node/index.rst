@@ -17,3 +17,4 @@ installation process. Finally, we explain how to configure and start your node.
     install
     use
     configure
+    kubernetes

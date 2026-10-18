@@ -1,0 +1,22 @@
+# Configuration of the docker node in the end-to-end test
+api_key: 22222222-2222-4222-8222-222222222222
+server_url: http://v6-e2e-server
+port: 80
+api_path: /api
+task_dir: /mnt/data
+databases:
+  - label: default
+    type: csv
+    uri: /data/data.csv
+policies:
+  allowed_algorithms:
+    - ghcr.io/vantage6/algorithm/demo/average
+encryption:
+  enabled: false
+logging:
+  level: DEBUG
+  use_console: true
+  backup_count: 5
+  max_size: 1024
+  format: "%(asctime)s - %(name)-14s - %(levelname)-8s - %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"
