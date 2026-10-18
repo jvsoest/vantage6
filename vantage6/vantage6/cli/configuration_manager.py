@@ -1,6 +1,7 @@
 from schema import And, Or, Use, Optional
 
 from vantage6.common.configuration_manager import Configuration, ConfigurationManager
+from vantage6.cli.globals import RUNTIME_DOCKER, RUNTIME_KUBERNETES
 
 LOGGING_VALIDATORS = {
     "level": And(
@@ -53,6 +54,8 @@ class NodeConfiguration(Configuration):
         Optional("node_extra_mounts"): [str],
         Optional("node_extra_hosts"): dict,
         Optional("share_algorithm_logs"): Use(bool),
+        Optional("runtime"): Or(RUNTIME_DOCKER, RUNTIME_KUBERNETES),
+        Optional("kubernetes"): dict,
     }
 
 

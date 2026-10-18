@@ -20,7 +20,12 @@ from colorama import Fore, Style
 from pathlib import Path
 
 from vantage6 import node
-from vantage6.node.context import NodeContext, DockerNodeContext
+from vantage6.node.context import (
+    NodeContext,
+    DockerNodeContext,
+    KubernetesNodeContext,
+)
+from vantage6.cli.globals import RUNTIME_DOCKER, RUNTIME_KUBERNETES
 from vantage6.common import warning, info, error, ensure_config_dir_writable
 
 from vantage6.cli.configuration_wizard import (
@@ -65,8 +70,19 @@ def cli_node() -> None:
     default=False,
     help=("Whether to use DockerNodeContext or regular NodeContext " "(default)"),
 )
+@click.option(
+    "--runtime",
+    type=click.Choice([RUNTIME_DOCKER, RUNTIME_KUBERNETES]),
+    default=RUNTIME_DOCKER,
+    envvar="V6_NODE_RUNTIME",
+    show_default=True,
+    help=(
+        "Container runtime to run algorithms with. Use 'kubernetes' when the node "
+        "runs as a pod in a Kubernetes cluster."
+    ),
+)
 def cli_node_start(
-    name: str, config: str, system_folders: bool, dockerized: bool
+    name: str, config: str, system_folders: bool, dockerized: bool, runtime: str
 ) -> None:
     """Start the node instance.
 
@@ -74,7 +90,13 @@ def cli_node_start(
     In case the configuration file not exists, a questionaire is
     invoked to create one.
     """
-    ContextClass = DockerNodeContext if dockerized else NodeContext
+    if runtime == RUNTIME_KUBERNETES:
+        if not config:
+            error("Starting a Kubernetes node requires the --config option.")
+            sys.exit(1)
+        ContextClass = KubernetesNodeContext
+    else:
+        ContextClass = DockerNodeContext if dockerized else NodeContext
 
     # in case a configuration file is given, we bypass all the helper
     # stuff since you know what you are doing

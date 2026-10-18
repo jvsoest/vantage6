@@ -16,6 +16,10 @@ DEFAULT_SERVER_SYSTEM_FOLDERS = True
 #
 DEFAULT_NODE_SYSTEM_FOLDERS = False
 
+# container runtimes that the node can use to run algorithms
+RUNTIME_DOCKER = "docker"
+RUNTIME_KUBERNETES = "kubernetes"
+
 #
 #   INSTALLATION SETTINGS
 #

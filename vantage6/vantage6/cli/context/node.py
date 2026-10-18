@@ -8,6 +8,7 @@ from vantage6.common.context import AppContext
 from vantage6.common.globals import APPNAME, InstanceType
 from vantage6.cli.configuration_manager import NodeConfigurationManager
 from vantage6.cli.globals import DEFAULT_NODE_SYSTEM_FOLDERS as N_FOL
+from vantage6.cli.globals import RUNTIME_DOCKER
 from vantage6.cli._version import __version__
 
 
@@ -146,6 +147,18 @@ class NodeContext(AppContext):
             paths as values.
         """
         return self.config["databases"]
+
+    @property
+    def runtime(self) -> str:
+        """
+        Container runtime that the node uses to run algorithms.
+
+        Returns
+        -------
+        str
+            Either 'docker' or 'kubernetes'. Defaults to 'docker'.
+        """
+        return self.config.get("runtime") or RUNTIME_DOCKER
 
     @property
     def docker_container_name(self) -> str:
