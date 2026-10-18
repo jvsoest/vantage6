@@ -79,12 +79,21 @@ seccompProfile:
 {{- printf "%s-proxy" (include "node.fullname" .) -}}
 {{- end -}}
 
-{{/* Databases whose claims are mounted in the node pod, by label */}}
+{{/*
+Databases on persistent volume claims, which are mounted in the node pod. A claim
+can only be used by one volume of a pod, so databases on the same claim share a
+volume.
+*/}}
 {{- define "node.databaseVolumes" -}}
+{{- $names := dict -}}
 {{- range .Values.node.databases }}
 {{- if and .volume .volume.claim_name }}
+{{- if not (hasKey $names .volume.claim_name) }}
+{{- $_ := set $names .volume.claim_name (printf "database-%d" (len $names)) }}
+{{- end }}
 - label: {{ .label | quote }}
   claim: {{ .volume.claim_name | quote }}
+  volume: {{ get $names .volume.claim_name | quote }}
   subPath: {{ .volume.sub_path | default "" | quote }}
 {{- end }}
 {{- end }}

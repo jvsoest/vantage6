@@ -93,7 +93,7 @@ spec:
             - name: tmp
               mountPath: /tmp
             {{- range include "node.databaseVolumes" . | fromYamlArray }}
-            - name: database-{{ .label | lower | replace "_" "-" }}
+            - name: {{ .volume }}
               mountPath: /mnt/databases/{{ .label }}
               {{- with .subPath }}
               subPath: {{ . }}
@@ -123,11 +123,15 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+        {{- $volumes := list }}
         {{- range include "node.databaseVolumes" . | fromYamlArray }}
-        - name: database-{{ .label | lower | replace "_" "-" }}
+        {{- if not (has .volume $volumes) }}
+        {{- $volumes = append $volumes .volume }}
+        - name: {{ .volume }}
           persistentVolumeClaim:
             claimName: {{ .claim }}
             readOnly: true
+        {{- end }}
         {{- end }}
       {{- with .Values.node.nodeSelector }}
       nodeSelector:
