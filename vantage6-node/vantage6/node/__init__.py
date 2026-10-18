@@ -55,6 +55,7 @@ from vantage6.common.docker.network_manager import NetworkManager
 from vantage6.common.task_status import TaskStatus
 from vantage6.common.log import get_file_logger
 from vantage6.cli.context.node import NodeContext
+from vantage6.cli.globals import RUNTIME_DOCKER, RUNTIME_KUBERNETES
 from vantage6.node.context import DockerNodeContext
 from vantage6.node.globals import (
     NODE_PROXY_SERVER_HOSTNAME,
@@ -112,8 +113,10 @@ class Node:
 
     def initialize(self) -> None:
         """Initialization of the node"""
-        # check if docker is running, otherwise exit with error
-        check_docker_running()
+        self.runtime = getattr(self.ctx, "runtime", RUNTIME_DOCKER)
+        if self.runtime == RUNTIME_DOCKER:
+            # check if docker is running, otherwise exit with error
+            check_docker_running()
 
         self.config = self.ctx.config
         self.debug: dict = self.config.get("debug", {})
@@ -143,6 +146,37 @@ class Node:
         t = Thread(target=self.__proxy_server_worker, daemon=True)
         t.start()
 
+        # Setup tasks dir
+        self._set_task_dir(self.ctx)
+
+        if self.runtime == RUNTIME_KUBERNETES:
+            self._init_kubernetes_runtime()
+        else:
+            self._init_docker_runtime()
+
+        # Thread for sending results to the server when they come available.
+        self.log.debug("Start thread for sending messages (results)")
+        t = Thread(target=self.__speaking_worker, daemon=True)
+        t.start()
+
+        # listen forever for incoming messages, tasks are stored in
+        # the queue.
+        self.log.debug("Starting thread for incoming messages (tasks)")
+        t = Thread(target=self.__listening_worker, daemon=True)
+        t.start()
+
+        self.log.debug("Start thread for sending system metadata")
+        t = Thread(target=self.__metadata_worker, daemon=True)
+        t.start()
+
+        self.log.info("Init complete")
+
+    def _init_docker_runtime(self) -> None:
+        """
+        Set up the isolated network, the VPN, SSH tunnels and squid proxy, and the
+        docker manager that runs algorithms as docker containers. Then connect to
+        the server.
+        """
         # setup docker isolated network manager
         internal_ = running_in_docker()
         if not internal_:
@@ -152,9 +186,6 @@ class Node:
             )
         isolated_network_mgr = NetworkManager(self.ctx.docker_network_name)
         isolated_network_mgr.create_network(is_internal=internal_)
-
-        # Setup tasks dir
-        self._set_task_dir(self.ctx)
 
         # Login to docker registries early, so that credentials are available
         # when infrastructure images (VPN, squid, SSH tunnel) are pulled
@@ -207,22 +238,34 @@ class Node:
         # the node container
         self.link_docker_services()
 
-        # Thread for sending results to the server when they come available.
-        self.log.debug("Start thread for sending messages (results)")
-        t = Thread(target=self.__speaking_worker, daemon=True)
-        t.start()
+    def _init_kubernetes_runtime(self) -> None:
+        """
+        Set up the Kubernetes manager that runs algorithms as Kubernetes jobs, pick
+        up jobs of a previous instance of the node and connect to the server.
 
-        # listen forever for incoming messages, tasks are stored in
-        # the queue.
-        self.log.debug("Starting thread for incoming messages (tasks)")
-        t = Thread(target=self.__listening_worker, daemon=True)
-        t.start()
+        Network isolation of algorithms is taken care of by NetworkPolicies, which
+        are part of the deployment of the node.
+        """
+        # imported here so that the kubernetes package is only required when it
+        # is used
+        from vantage6.node.k8s.manager import KubernetesManager
 
-        self.log.debug("Start thread for sending system metadata")
-        t = Thread(target=self.__metadata_worker, daemon=True)
-        t.start()
+        self.vpn_manager = None
+        self.ssh_tunnels = None
+        self.squid = None
 
-        self.log.info("Init complete")
+        self.log.debug("Setting up the Kubernetes manager")
+        self.__runtime = KubernetesManager(ctx=self.ctx, client=self.client)
+
+        # Pick up jobs of a previous instance of the node *before* the task queue
+        # is synchronized with the server (which happens when connecting to the
+        # socket), so that these runs are not started a second time.
+        self.__runtime.reconcile()
+
+        # Create a long-lasting websocket connection.
+        self.log.debug("Creating websocket connection with the server")
+        self.connect_to_socket()
+        self.__runtime.attach_socket(self.socketIO)
 
     def __metadata_worker(self) -> None:
         """
@@ -321,7 +364,18 @@ class Node:
         A proxy for communication between algorithms and central
         server.
         """
-        if self.ctx.running_in_docker:
+        if self.runtime == RUNTIME_KUBERNETES:
+            # Algorithm pods reach the proxy through a Kubernetes service, whose
+            # name should be provided in PROXY_SERVER_HOST by the deployment. As a
+            # fallback, use the IP address of the node pod.
+            default_proxy_host = os.environ.get("POD_IP", "localhost")
+            if "PROXY_SERVER_HOST" not in os.environ:
+                self.log.warning(
+                    "PROXY_SERVER_HOST is not set. Algorithms will reach the "
+                    "proxy server at '%s'.",
+                    default_proxy_host,
+                )
+        elif self.ctx.running_in_docker:
             # NODE_PROXY_SERVER_HOSTNAME points to the name of the proxy
             # when running in the isolated docker network.
             default_proxy_host = NODE_PROXY_SERVER_HOSTNAME
@@ -770,7 +824,12 @@ class Node:
         # may contain the private key, which which we don't want to share.
         # We'll only do this if we're running outside docker, otherwise we
         # would create '/data' on the data volume.
-        if not ctx.running_in_docker:
+        if self.runtime == RUNTIME_KUBERNETES:
+            # the data dir is the task volume that is shared with algorithm pods.
+            # Each algorithm pod only gets access to its own subfolders.
+            self.__tasks_dir = ctx.data_dir
+            self.__vpn_dir = None
+        elif not ctx.running_in_docker:
             self.__tasks_dir = ctx.data_dir / "data"
             os.makedirs(self.__tasks_dir, exist_ok=True)
             self.__vpn_dir = ctx.data_dir / "vpn"
