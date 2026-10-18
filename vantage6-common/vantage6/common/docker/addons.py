@@ -578,6 +578,165 @@ def get_digest(
         return _get_digest_via_manifest(full_image, docker_username, docker_password)
 
 
+# Media types of image manifests and image indexes (multi-platform images)
+MANIFEST_MEDIA_TYPES = (
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+)
+
+
+def _registry_token(
+    www_authenticate: str,
+    registry_user: str | None = None,
+    registry_password: str | None = None,
+) -> str | None:
+    """
+    Obtain a bearer token for the registry, as challenged by the
+    'www-authenticate' header of an unauthorized response.
+
+    Parameters
+    ----------
+    www_authenticate: str
+        Value of the 'www-authenticate' header
+    registry_user: str | None
+        Username to authenticate with at the token service
+    registry_password: str | None
+        Password to authenticate with at the token service
+
+    Returns
+    -------
+    str | None
+        Bearer token, or None if it could not be obtained
+    """
+    realm_match = re.match(r'Bearer realm="(?P<realm>[^"]+)"', www_authenticate)
+    if not realm_match:
+        return None
+    params = {}
+    for key in ("scope", "service"):
+        match = re.search(rf'{key}="(?P<value>[^"]+)"', www_authenticate)
+        if match:
+            params[key] = match.group("value")
+    auth = (
+        HTTPBasicAuth(registry_user, registry_password)
+        if registry_user and registry_password
+        else None
+    )
+    response = requests.get(
+        realm_match.group("realm"), params=params, auth=auth, timeout=60
+    )
+    if response.status_code != HTTPStatus.OK:
+        return None
+    body = response.json()
+    return body.get("token") or body.get("access_token")
+
+
+def get_registry_digest(
+    full_image: str,
+    registry_user: str | None = None,
+    registry_password: str | None = None,
+) -> str | None:
+    """
+    Get the digest of an image from its registry, without using a Docker daemon.
+
+    Unlike :func:`get_digest`, this accepts image indexes, so that for
+    multi-platform images the digest of the index is returned rather than the
+    digest of the manifest of one platform. The digest can therefore be used to
+    pull the image on any platform (``image@digest``).
+
+    Parameters
+    ----------
+    full_image: str
+        Image name. E.g. "ghcr.io/vantage6/algorithm/demo/average:latest"
+    registry_user: str | None
+        Username to authenticate with at the registry. Required if the image is
+        private
+    registry_password: str | None
+        Password to authenticate with at the registry. Required if the image is
+        private
+
+    Returns
+    -------
+    str | None
+        Digest of the image or `None` if the digest could not be found
+    """
+    # if the image is referenced by digest, that digest is the answer
+    if "@" in full_image:
+        digest = full_image.rsplit("@", 1)[1]
+        if digest.startswith("sha256:"):
+            return digest
+
+    try:
+        registry, image, tag = parse_image_name(full_image)
+    except Exception as exc:
+        log.warning("Could not parse image name %s: %s", full_image, exc)
+        return None
+
+    # if requesting from docker hub, manifests are at 'registry-1.docker.io' and
+    # official images are in the 'library' namespace
+    if registry == "docker.io":
+        registry = "registry-1.docker.io"
+        if "/" not in image:
+            image = f"library/{image}"
+
+    endpoint = f"https://{registry}/v2/{image}/manifests/{tag}"
+    headers = {"Accept": ", ".join(MANIFEST_MEDIA_TYPES)}
+    basic_auth = (
+        HTTPBasicAuth(registry_user, registry_password)
+        if registry_user and registry_password
+        else None
+    )
+
+    # credentials that are used for the request: none, a bearer token or basic auth
+    credentials = {"headers": headers, "auth": None}
+
+    def _request(method: str) -> requests.Response:
+        return requests.request(method, endpoint, timeout=60, **credentials)
+
+    try:
+        # HEAD requests do not count towards the rate limits of e.g. Docker Hub
+        response = _request("HEAD")
+        if (
+            response.status_code == HTTPStatus.UNAUTHORIZED
+            and "www-authenticate" in response.headers
+        ):
+            token = _registry_token(
+                response.headers["www-authenticate"], registry_user, registry_password
+            )
+            if token:
+                credentials["headers"] = {
+                    **headers,
+                    "Authorization": f"Bearer {token}",
+                }
+                response = _request("HEAD")
+        if response.status_code == HTTPStatus.UNAUTHORIZED and basic_auth:
+            credentials = {"headers": headers, "auth": basic_auth}
+            response = _request("HEAD")
+
+        if response.status_code != HTTPStatus.OK:
+            log.warning(
+                "Could not retrieve manifest of image %s (HTTP %s)",
+                full_image,
+                response.status_code,
+            )
+            return None
+        if "Docker-Content-Digest" in response.headers:
+            return response.headers["Docker-Content-Digest"]
+
+        # Some registries only return the digest header on GET requests. As a last
+        # resort, compute the digest from the manifest exactly as it is served.
+        response = _request("GET")
+        if response.status_code != HTTPStatus.OK:
+            return None
+        if "Docker-Content-Digest" in response.headers:
+            return response.headers["Docker-Content-Digest"]
+        return f"sha256:{hashlib.sha256(response.content).hexdigest()}"
+    except requests.RequestException as exc:
+        log.warning("Could not retrieve manifest of image %s: %s", full_image, exc)
+        return None
+
+
 def __calculate_digest(manifest: str) -> str:
     """
     Calculate the SHA256 digest from a Docker image manifest.
