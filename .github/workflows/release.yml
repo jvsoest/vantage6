@@ -60,9 +60,15 @@ jobs:
           echo "tag_latest=${TAG_LATEST}" >> $GITHUB_OUTPUT
 
           # images are pushed to the registry of the repository that runs this
-          # workflow (lowercase, as required by ghcr.io)
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "registry=ghcr.io/${OWNER}/infrastructure" >> $GITHUB_OUTPUT
+          # workflow: ghcr.io/<owner>/<repository>/<image> (lowercase, as required
+          # by ghcr.io). The upstream repository keeps its existing location.
+          REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          if [[ "$REPOSITORY" == "vantage6/vantage6" ]]; then
+            REGISTRY=ghcr.io/vantage6/infrastructure
+          else
+            REGISTRY=ghcr.io/${REPOSITORY}
+          fi
+          echo "registry=${REGISTRY}" >> $GITHUB_OUTPUT
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
