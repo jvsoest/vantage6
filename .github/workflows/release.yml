@@ -58,6 +58,11 @@ jobs:
           TAG_LATEST=false
           if [[ "$STAGE" == "" && "$MAJOR" == "$LATEST_MAJOR" ]]; then TAG_LATEST=true; fi
           echo "tag_latest=${TAG_LATEST}" >> $GITHUB_OUTPUT
+
+          # images are pushed to the registry of the repository that runs this
+          # workflow (lowercase, as required by ghcr.io)
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "registry=ghcr.io/${OWNER}/infrastructure" >> $GITHUB_OUTPUT
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
@@ -124,6 +129,7 @@ jobs:
       major_name: ${{ steps.split.outputs.major_name }}
       branch: ${{ steps.branchname.outputs.branch }}
       tag_latest: ${{ steps.split.outputs.tag_latest }}
+      registry: ${{ steps.split.outputs.registry }}
 
   # Create Github release which can be used DOI generation
   github-release:
@@ -152,6 +158,7 @@ jobs:
       patch: ${{ needs.version.outputs.patch }}
       stage: ${{ needs.version.outputs.stage }}
       tag_latest: ${{ needs.version.outputs.tag_latest }}
+      registry: ${{ needs.version.outputs.registry }}
     steps:
       - name: Log in to GHCR
         # pinned to: https://github.com/docker/login-action/releases/tag/v4.1.0
@@ -176,7 +183,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push support images
-        run: make support-image TAG=$version PUSH_REG=true TAG_LATEST=$tag_latest
+        run: make support-image TAG=$version REGISTRY=$registry PUSH_REG=true TAG_LATEST=$tag_latest
 
   infrastructure-images:
     name: Build infrastructure images
@@ -190,6 +197,7 @@ jobs:
       stage: ${{ needs.version.outputs.stage }}
       branch: ${{ needs.version.outputs.branch }}
       tag_latest: ${{ needs.version.outputs.tag_latest }}
+      registry: ${{ needs.version.outputs.registry }}
     steps:
       - name: Log in to GHCR
         # pinned to: https://github.com/docker/login-action/releases/tag/v4.1.0
@@ -216,21 +224,21 @@ jobs:
       # we only release a new base image if it is a major or minor release
       - name: Build and push Docker base image
         if: ${{ env.patch == 0 }}
-        run: make base-image TAG=${major}.${minor} PUSH_REG=true TAG_LATEST=$tag_latest
+        run: make base-image TAG=${major}.${minor} REGISTRY=$registry PUSH_REG=true TAG_LATEST=$tag_latest
 
       # build the actual infrastructure images
       - name: Build and push Docker image
-        run: make image TAG=$version BASE=${major}.${minor} PUSH_REG=true
+        run: make image TAG=$version BASE=${major}.${minor} REGISTRY=$registry PUSH_REG=true
           TAG_LATEST=$tag_latest
 
       # build the algorithm store image
       - name: Build and push Docker algorithm store image
         run: make algorithm-store-image TAG=$version BASE=${major}.${minor}
-          PUSH_REG=true TAG_LATEST=$tag_latest
+          REGISTRY=$registry PUSH_REG=true TAG_LATEST=$tag_latest
 
       # build the UI image
       - name: Build and push UI image
-        run: make ui-image TAG=$version BASE=${major}.${minor} PUSH_REG=true
+        run: make ui-image TAG=$version BASE=${major}.${minor} REGISTRY=$registry PUSH_REG=true
           TAG_LATEST=$tag_latest
 
   algorithm-base-image:
@@ -244,6 +252,7 @@ jobs:
       patch: ${{ needs.version.outputs.patch }}
       stage: ${{ needs.version.outputs.stage }}
       tag_latest: ${{ needs.version.outputs.tag_latest }}
+      registry: ${{ needs.version.outputs.registry }}
 
     steps:
       - name: Log in to GHCR
@@ -269,13 +278,13 @@ jobs:
 
       - name: Build and push Algorithm base image
         if: ${{ env.stage == '' || env.patch == 0 }}
-        run: make algorithm-base-image TAG=${major}.${minor} PUSH_REG=true
+        run: make algorithm-base-image TAG=${major}.${minor} REGISTRY=$registry PUSH_REG=true
           TAG_LATEST=$tag_latest
 
       - name: Build and push Algorithm OMOP base image
         if: ${{ env.stage == '' || env.patch == 0 }}
         run: make algorithm-omop-base-image BASE=${major}.${minor} TAG=${major}.${minor}
-          PUSH_REG=true TAG_LATEST=$tag_latest
+          REGISTRY=$registry PUSH_REG=true TAG_LATEST=$tag_latest
 
   # Update the server and node images
   deploy:
@@ -288,6 +297,7 @@ jobs:
       patch: ${{ needs.version.outputs.patch }}
       stage: ${{ needs.version.outputs.stage }}
       major_name: ${{ needs.version.outputs.major_name }}
+      registry: ${{ needs.version.outputs.registry }}
     steps:
       - name: Log in to GHCR
         # pinned to: https://github.com/docker/login-action/releases/tag/v4.1.0
@@ -299,24 +309,24 @@ jobs:
 
       - name: Pull docker images
         run: |
-          docker pull ghcr.io/vantage6/infrastructure/server:${version}
-          docker pull ghcr.io/vantage6/infrastructure/node:${version}
-          docker pull ghcr.io/vantage6/infrastructure/algorithm-store:${version}
-          docker pull ghcr.io/vantage6/infrastructure/ui:${version}
-          docker pull ghcr.io/vantage6/infrastructure/alpine:${version}
-          docker pull ghcr.io/vantage6/infrastructure/vpn-client:${version}
-          docker pull ghcr.io/vantage6/infrastructure/vpn-configurator:${version}
-          docker pull ghcr.io/vantage6/infrastructure/ssh-tunnel:${version}
-          docker pull ghcr.io/vantage6/infrastructure/squid:${version}
+          docker pull ${registry}/server:${version}
+          docker pull ${registry}/node:${version}
+          docker pull ${registry}/algorithm-store:${version}
+          docker pull ${registry}/ui:${version}
+          docker pull ${registry}/alpine:${version}
+          docker pull ${registry}/vpn-client:${version}
+          docker pull ${registry}/vpn-configurator:${version}
+          docker pull ${registry}/ssh-tunnel:${version}
+          docker pull ${registry}/squid:${version}
 
       - name: Tag docker images
         if: ${{  env.stage == ''  &&  env.major_name != '' }}
         run: |
-          docker tag ghcr.io/vantage6/infrastructure/server:${version} ghcr.io/vantage6/infrastructure/server:${major_name}
-          docker tag ghcr.io/vantage6/infrastructure/server:${version} ghcr.io/vantage6/infrastructure/server:${major_name}-live
-          docker tag ghcr.io/vantage6/infrastructure/node:${version} ghcr.io/vantage6/infrastructure/node:${major_name}
-          docker tag ghcr.io/vantage6/infrastructure/algorithm-store:${version} ghcr.io/vantage6/infrastructure/algorithm-store:${major_name}
-          docker tag ghcr.io/vantage6/infrastructure/ui:${version} ghcr.io/vantage6/infrastructure/ui:${major_name}
+          docker tag ${registry}/server:${version} ${registry}/server:${major_name}
+          docker tag ${registry}/server:${version} ${registry}/server:${major_name}-live
+          docker tag ${registry}/node:${version} ${registry}/node:${major_name}
+          docker tag ${registry}/algorithm-store:${version} ${registry}/algorithm-store:${major_name}
+          docker tag ${registry}/ui:${version} ${registry}/ui:${major_name}
 
       # Release a node image for major.minor. This is released for any
       # non-candidate release or if no non-candidate release has been made yet
@@ -324,17 +334,17 @@ jobs:
       - name: Build latest node minor image
         if: ${{ env.stage == '' || env.patch == 0 }}
         run: |
-          docker tag ghcr.io/vantage6/infrastructure/node:${version} ghcr.io/vantage6/infrastructure/node:${major}.${minor}
-          docker push ghcr.io/vantage6/infrastructure/node:${major}.${minor}
+          docker tag ${registry}/node:${version} ${registry}/node:${major}.${minor}
+          docker push ${registry}/node:${major}.${minor}
 
       - name: Push docker images
         if: ${{  env.stage == ''  &&  env.major_name != '' }}
         run: |
-          docker push ghcr.io/vantage6/infrastructure/server:${major_name}
-          docker push ghcr.io/vantage6/infrastructure/server:${major_name}-live
-          docker push ghcr.io/vantage6/infrastructure/node:${major_name}
-          docker push ghcr.io/vantage6/infrastructure/algorithm-store:${major_name}
-          docker push ghcr.io/vantage6/infrastructure/ui:${major_name}
+          docker push ${registry}/server:${major_name}
+          docker push ${registry}/server:${major_name}-live
+          docker push ${registry}/node:${major_name}
+          docker push ${registry}/algorithm-store:${major_name}
+          docker push ${registry}/ui:${major_name}
 
       # Release matching support images for major.minor. This is released for any
       # non-candidate release or if no non-candidate release has been made yet
@@ -342,20 +352,20 @@ jobs:
       - name: Build latest minor version support images
         if: ${{ env.stage == '' || env.patch == 0 }}
         run: |
-          docker tag ghcr.io/vantage6/infrastructure/alpine:${version} ghcr.io/vantage6/infrastructure/alpine:${major}.${minor}
-          docker push ghcr.io/vantage6/infrastructure/alpine:${major}.${minor}
+          docker tag ${registry}/alpine:${version} ${registry}/alpine:${major}.${minor}
+          docker push ${registry}/alpine:${major}.${minor}
 
-          docker tag ghcr.io/vantage6/infrastructure/vpn-client:${version} ghcr.io/vantage6/infrastructure/vpn-client:${major}.${minor}
-          docker push ghcr.io/vantage6/infrastructure/vpn-client:${major}.${minor}
+          docker tag ${registry}/vpn-client:${version} ${registry}/vpn-client:${major}.${minor}
+          docker push ${registry}/vpn-client:${major}.${minor}
 
-          docker tag ghcr.io/vantage6/infrastructure/vpn-configurator:${version} ghcr.io/vantage6/infrastructure/vpn-configurator:${major}.${minor}
-          docker push ghcr.io/vantage6/infrastructure/vpn-configurator:${major}.${minor}
+          docker tag ${registry}/vpn-configurator:${version} ${registry}/vpn-configurator:${major}.${minor}
+          docker push ${registry}/vpn-configurator:${major}.${minor}
 
-          docker tag ghcr.io/vantage6/infrastructure/ssh-tunnel:${version} ghcr.io/vantage6/infrastructure/ssh-tunnel:${major}.${minor}
-          docker push ghcr.io/vantage6/infrastructure/ssh-tunnel:${major}.${minor}
+          docker tag ${registry}/ssh-tunnel:${version} ${registry}/ssh-tunnel:${major}.${minor}
+          docker push ${registry}/ssh-tunnel:${major}.${minor}
 
-          docker tag ghcr.io/vantage6/infrastructure/squid:${version} ghcr.io/vantage6/infrastructure/squid:${major}.${minor}
-          docker push ghcr.io/vantage6/infrastructure/squid:${major}.${minor}
+          docker tag ${registry}/squid:${version} ${registry}/squid:${major}.${minor}
+          docker push ${registry}/squid:${major}.${minor}
 
   # Build an release all the vantage6 infrastructure packages. For all
   # the packages it will (1) update the version as specified in the tag,
