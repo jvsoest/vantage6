@@ -1,0 +1,102 @@
+name: Build images
+
+# Builds the node and server image (they share one Dockerfile) and pushes it to the
+# container registry of the repository that runs this workflow:
+#   ghcr.io/<owner>/infrastructure/node:<tag>
+#   ghcr.io/<owner>/infrastructure/server:<tag>
+#
+# Images are tagged with the branch name and the short commit SHA, and with
+# 'latest' for the default branch. The infrastructure base image is taken from the
+# upstream vantage6 registry, so it does not have to be built here.
+
+on:
+  push:
+    branches:
+      - "**"
+    paths-ignore:
+      - "docs/**"
+      - "charts/**"
+      - "**.md"
+      - "**.rst"
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Platforms to build for (comma separated)
+        default: linux/amd64
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Registry and tag of the infrastructure base image the node/server image is
+  # built on
+  BASE_REGISTRY: ghcr.io/vantage6/infrastructure
+  BASE_TAG: "4.15"
+
+jobs:
+  node-and-server:
+    name: Build node and server image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine registry
+        id: registry
+        run: |
+          # image names on ghcr.io must be lowercase
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "registry=ghcr.io/${owner}/infrastructure" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        # pinned to: https://github.com/docker/login-action/releases/tag/v4.1.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Add support for more platforms with QEMU, for multi-platform builds
+      - name: Set up QEMU
+        if: ${{ contains(inputs.platforms, ',') || contains(inputs.platforms, 'arm') }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ steps.registry.outputs.registry }}/node
+            ${{ steps.registry.outputs.registry }}/server
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+          # the source label links the packages to this repository
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/node-and-server.Dockerfile
+          platforms: ${{ inputs.platforms || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            REGISTRY=${{ env.BASE_REGISTRY }}
+            BASE=${{ env.BASE_TAG }}
+            TAG=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
