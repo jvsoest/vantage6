@@ -4,9 +4,12 @@
 # in the same namespace. Install each node in a dedicated namespace.
 
 image:
-  repository: ghcr.io/vantage6/infrastructure/node
-  # defaults to the appVersion of the chart
-  tag: ""
+  # The Kubernetes runtime is not part of a vantage6 release yet, so the default is
+  # the node image built from this branch. The upstream image
+  # (ghcr.io/vantage6/infrastructure/node) does not contain it.
+  repository: ghcr.io/jvsoest/vantage6/node
+  # empty defaults to the appVersion of the chart
+  tag: feature-kubernetes_support
   pullPolicy: IfNotPresent
 
 # pull secrets for the node image
@@ -88,6 +91,11 @@ node:
   # `config.yaml`) instead of the configuration generated from these values.
   existingConfigSecret: ""
 
+  # Resources of the node pod. Clusters that enforce requests and limits (e.g.
+  # with Kyverno or Gatekeeper) may also require ephemeral-storage:
+  # resources:
+  #   requests: {cpu: 100m, memory: 256Mi, ephemeral-storage: 256Mi}
+  #   limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 1Gi}
   resources: {}
   nodeSelector: {}
   tolerations: []
@@ -108,6 +116,7 @@ algorithms:
   serviceAccount:
     create: true
     name: ""
+  # Resources of every algorithm pod, same format as node.resources
   resources: {}
   nodeSelector: {}
   tolerations: []
@@ -120,6 +129,8 @@ algorithms:
     activeDeadlineSeconds: null
     imagePullTimeoutSeconds: 300
     pendingTimeoutSeconds: null
+    # fail a run if its pod is not created, e.g. when a policy rejects it
+    podCreationTimeoutSeconds: 60
     keepOnShutdown: true
   # NetworkPolicy egress rules that allow algorithms to reach services, e.g.
   # service databases. Algorithms can always reach the node proxy and DNS.

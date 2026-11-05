@@ -20,3 +20,8 @@ Kubernetes node as the node pod.
 Algorithms are isolated with NetworkPolicies. Make sure that the network plugin of
 your cluster enforces NetworkPolicies, otherwise algorithms are not isolated.
 {{- end }}
+{{- if or (not .Values.node.resources) (not .Values.algorithms.resources) }}
+
+No resource requests and limits are set for the node pod (node.resources) or the
+algorithm pods (algorithms.resources). Clusters that enforce them reject these pods.
+{{- end }}

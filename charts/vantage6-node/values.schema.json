@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Values of the vantage6-node chart. Unknown keys are rejected so that misplaced settings (e.g. resources instead of node.resources) are not silently ignored.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": {"type": "object"},
+    "nameOverride": {"type": "string"},
+    "fullnameOverride": {"type": "string"},
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"type": "string"},
+        "tag": {"type": "string"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "imagePullSecrets": {"type": "array"},
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serverUrl": {"type": "string"},
+        "port": {"type": "integer"},
+        "apiPath": {"type": "string"},
+        "apiKey": {"type": "string"},
+        "existingApiKeySecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {"type": "string"},
+            "key": {"type": "string"}
+          }
+        },
+        "encryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "privateKey": {"type": "string"},
+            "existingSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string"},
+                "key": {"type": "string"}
+              }
+            }
+          }
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "type", "uri"],
+            "properties": {
+              "label": {"type": "string"},
+              "type": {"type": "string"},
+              "uri": {"type": "string"},
+              "mount_mode": {"enum": ["ro", "copy"]},
+              "env": {"type": "object"},
+              "volume": {
+                "type": "object",
+                "required": ["claim_name"],
+                "additionalProperties": false,
+                "properties": {
+                  "claim_name": {"type": "string"},
+                  "sub_path": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "policies": {"type": "object"},
+        "registries": {"type": "array"},
+        "existingImagePullSecrets": {"type": "array"},
+        "algorithmEnv": {"type": "object"},
+        "shareAlgorithmLogs": {"type": "boolean"},
+        "shareConfig": {"type": "boolean"},
+        "runContextFile": {"type": "boolean"},
+        "logging": {"type": "object"},
+        "extraConfig": {"type": "object"},
+        "existingConfigSecret": {"type": "string"},
+        "resources": {"type": "object"},
+        "nodeSelector": {"type": "object"},
+        "tolerations": {"type": "array"},
+        "affinity": {"type": "object"}
+      }
+    },
+    "taskVolume": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existingClaim": {"type": "string"},
+        "storageClass": {"type": "string"},
+        "accessMode": {"enum": ["ReadWriteMany", "ReadWriteOnce"]},
+        "size": {"type": "string"}
+      }
+    },
+    "algorithms": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": {"type": "boolean"},
+            "name": {"type": "string"}
+          }
+        },
+        "resources": {"type": "object"},
+        "nodeSelector": {"type": "object"},
+        "tolerations": {"type": "array"},
+        "affinity": {"type": "object"},
+        "priorityClassName": {"type": "string"},
+        "readOnlyRootFilesystem": {"type": "boolean"},
+        "gpuResourceName": {"type": "string"},
+        "job": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ttlSecondsAfterFinished": {"type": ["integer", "null"]},
+            "activeDeadlineSeconds": {"type": ["integer", "null"]},
+            "imagePullTimeoutSeconds": {"type": ["integer", "null"]},
+            "pendingTimeoutSeconds": {"type": ["integer", "null"]},
+            "podCreationTimeoutSeconds": {"type": "integer"},
+            "keepOnShutdown": {"type": "boolean"}
+          }
+        },
+        "egress": {"type": "array"}
+      }
+    },
+    "podSecurityContext": {"type": "object"},
+    "openshift": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"enum": ["auto", true, false]}
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {"type": "integer"}
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespaceSelector": {"type": "object"},
+            "podSelector": {"type": "object"},
+            "ports": {"type": "array"}
+          }
+        }
+      }
+    }
+  }
+}

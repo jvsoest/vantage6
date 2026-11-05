@@ -100,7 +100,14 @@ and install the chart:
 Follow the logs of the node with
 ``kubectl logs -n my-node deploy/my-node-vantage6-node -f``.
 
-All options are documented in the ``values.yaml`` file of the chart. Instead of
+The chart uses the node image that is built from this branch
+(``ghcr.io/jvsoest/vantage6/node:feature-kubernetes_support``), because the
+released node images do not contain the Kubernetes runtime yet. Override
+``image.repository`` and ``image.tag`` to use another image.
+
+All options are documented in the ``values.yaml`` file of the chart. The chart
+validates the values against ``values.schema.json``: unknown keys, such as
+``resources`` instead of ``node.resources``, are rejected. Instead of
 having the chart generate the node configuration, you can also provide a complete
 node configuration file in an existing secret (``node.existingConfigSecret``,
 key ``config.yaml``). See :ref:`node-kubernetes-config` for the configuration
@@ -156,6 +163,31 @@ OpenShift:
   not set ``runAsUser``, ``runAsGroup`` or ``fsGroup``;
 - the NetworkPolicies allow DNS through the OpenShift DNS service;
 - no Route is needed, because the node only makes outgoing connections.
+
+Resource requests and limits
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Many clusters reject pods without resource requests and limits, for instance with
+a Kyverno or Gatekeeper policy, a ResourceQuota or a LimitRange. Some also require
+``ephemeral-storage``. Set them for the node pod in ``node.resources`` and for
+every algorithm pod in ``algorithms.resources``; the node passes the latter on to
+the Jobs it creates:
+
+.. code:: yaml
+
+    node:
+      resources:
+        requests: {cpu: 100m, memory: 256Mi, ephemeral-storage: 256Mi}
+        limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 1Gi}
+    algorithms:
+      resources:
+        requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 1Gi}
+        limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 10Gi}
+
+If a policy rejects the algorithm pods, the Job is created but its pod is not. The
+node then reports the run as failed after
+``algorithms.job.podCreationTimeoutSeconds`` (60 seconds by default); the events of
+the Job (``kubectl describe job``) show which policy rejected the pod.
 
 .. _node-kubernetes-rwo:
 
@@ -221,6 +253,9 @@ the ``kubernetes`` section:
         # Fail a run if it cannot be scheduled within this many seconds
         # (default: wait until it can be scheduled)
         pending_timeout_seconds: null
+        # Fail a run if Kubernetes does not create its pod within this many
+        # seconds, e.g. because an admission policy rejected it
+        pod_creation_timeout_seconds: 60
         # Leave running jobs alone when the node stops, so they can be picked up
         # when it starts again
         keep_on_shutdown: true
