@@ -10,7 +10,7 @@ if [ -z "$VANTAGE6_CONFIG_LOCATION" ]; then
 fi
 
 uwsgi \
-    --http :80 \
+    --http :${V6_SERVER_PORT:-80} \
     --gevent 1000 \
     --http-websockets \
     --http-chunked-input \

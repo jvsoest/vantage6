@@ -56,11 +56,12 @@ RUN CFLAGS="-I/usr/local/opt/openssl/include" \
 
 RUN chmod +x /vantage6/vantage6-server/server.sh
 
-# Allow the node to run with an arbitrary user in the root group, as is done on
-# OpenShift and other Kubernetes clusters that don't allow running as root.
-RUN mkdir -p /mnt/log /mnt/data /mnt/config \
-  && chgrp -R 0 /mnt \
-  && chmod -R g=u /mnt
+# Allow the node and server to run with an arbitrary user in the root group, as is
+# done on OpenShift and other Kubernetes clusters that don't allow running as root.
+# /usr/local/share/vantage6 holds the system folders of the CLI commands.
+RUN mkdir -p /mnt/log /mnt/data /mnt/config /usr/local/share/vantage6 \
+  && chgrp -R 0 /mnt /usr/local/share/vantage6 \
+  && chmod -R g=u /mnt /usr/local/share/vantage6
 
 # expose the proxy server port
 ARG port=80
