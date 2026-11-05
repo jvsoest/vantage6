@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import tempfile
@@ -167,6 +168,19 @@ class TestKubernetesManager(ManagerTestCase):
         result = manager.get_result()
         self.assertEqual(result.status, TaskStatus.START_FAILED)
         self.assertIn("refused", result.logs)
+        self.assertIn("Invalid", result.logs)
+
+    def test_job_rejected_by_admission_policy(self):
+        self.api.create_error = ApiException(status=400, reason="Bad Request")
+        self.api.create_error.body = json.dumps(
+            {"kind": "Status", "message": "admission webhook denied the request"}
+        )
+        manager = self.manager()
+        self.start(manager)
+
+        result = manager.get_result()
+        self.assertEqual(result.status, TaskStatus.START_FAILED)
+        self.assertIn("admission webhook denied the request", result.logs)
 
     def test_job_already_exists(self):
         self.api.create_error = ApiException(status=409, reason="AlreadyExists")

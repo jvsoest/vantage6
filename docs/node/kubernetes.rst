@@ -184,10 +184,11 @@ the Jobs it creates:
         requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 1Gi}
         limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 10Gi}
 
-If a policy rejects the algorithm pods, the Job is created but its pod is not. The
-node then reports the run as failed after
-``algorithms.job.podCreationTimeoutSeconds`` (60 seconds by default); the events of
-the Job (``kubectl describe job``) show which policy rejected the pod.
+If a policy rejects the algorithm Job, the run fails immediately with the message
+of the policy. If a policy only rejects the pod of the Job, the Job is created but
+its pod is not; the node then reports the run as failed after
+``algorithms.job.podCreationTimeoutSeconds`` (60 seconds by default), and the events
+of the Job (``kubectl describe job``) show which policy rejected the pod.
 
 .. _node-kubernetes-rwo:
 

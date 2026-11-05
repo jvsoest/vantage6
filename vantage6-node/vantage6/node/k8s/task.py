@@ -2,6 +2,7 @@
 Management of a single algorithm run on Kubernetes.
 """
 
+import json
 import logging
 import os
 import threading
@@ -259,8 +260,8 @@ class KubernetesTaskManager(RunIOMixin):
             elif exc.status and 400 <= exc.status < 500:
                 self.status = TaskStatus.START_FAILED
                 self.failure_logs = (
-                    f"Kubernetes refused to create the algorithm job: {exc.reason}. "
-                    "Check the node logs for details."
+                    "Kubernetes refused to create the algorithm job: "
+                    f"{_api_error_message(exc)}"
                 )
                 self.log.error("Kubernetes refused job %s: %s", self.job_name, exc)
                 raise PermanentAlgorithmStartFail(exc) from exc
@@ -446,3 +447,15 @@ class KubernetesTaskManager(RunIOMixin):
         except Exception:
             self.log.exception("Could not read logs of run %s", self.run_id)
             return ""
+
+
+def _api_error_message(exc: ApiException) -> str:
+    """
+    Explanation of why the Kubernetes API refused a request, e.g. the message of
+    an admission policy that rejected it, or the reason if there is no message.
+    """
+    try:
+        message = json.loads(exc.body).get("message")
+    except (TypeError, ValueError, AttributeError):
+        message = None
+    return message.strip() if message else str(exc.reason)
