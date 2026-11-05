@@ -55,6 +55,9 @@ class JobConfig:
     active_deadline_seconds: int | None = None
     # Seconds after which a run fails if its image cannot be pulled
     image_pull_timeout_seconds: int = 300
+    # Seconds after which a run fails if Kubernetes has not created its pod, e.g.
+    # because an admission policy or quota rejected it
+    pod_creation_timeout_seconds: int = 60
     # Seconds after which a run fails if it cannot be scheduled. None to wait
     # until it can be scheduled.
     pending_timeout_seconds: int | None = None

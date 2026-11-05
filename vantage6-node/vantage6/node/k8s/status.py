@@ -73,12 +73,22 @@ def evaluate(
                 message=_failure_message(condition, container),
             )
 
+    age = _age(job, now)
     if not pod:
+        if age > config.pod_creation_timeout_seconds:
+            return RunState(
+                finished=True,
+                status=TaskStatus.START_FAILED,
+                message=(
+                    "Kubernetes did not create the algorithm pod, e.g. because an "
+                    "admission policy or resource quota rejected it. See the events "
+                    "of the Job in the namespace of the node."
+                ),
+            )
         return RunState(finished=False)
 
     waiting = (container.get("state") or {}).get("waiting") or {}
     reason = waiting.get("reason")
-    age = _age(job, now)
 
     if reason in PERMANENT_START_ERRORS:
         status = (

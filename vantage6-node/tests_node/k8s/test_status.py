@@ -43,6 +43,12 @@ class TestEvaluate(unittest.TestCase):
     def test_no_pod_yet(self):
         self.assertFalse(self.evaluate(_job()).finished)
 
+    def test_pod_not_created(self):
+        state = self.evaluate(_job(age=120))
+        self.assertTrue(state.finished)
+        self.assertEqual(state.status, TaskStatus.START_FAILED)
+        self.assertIn("admission policy", state.message)
+
     def test_complete(self):
         state = self.evaluate(_job([{"type": "Complete", "status": "True"}]))
         self.assertTrue(state.finished)

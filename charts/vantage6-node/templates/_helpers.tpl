@@ -154,6 +154,7 @@ volume.
       "active_deadline_seconds" .Values.algorithms.job.activeDeadlineSeconds
       "image_pull_timeout_seconds" .Values.algorithms.job.imagePullTimeoutSeconds
       "pending_timeout_seconds" .Values.algorithms.job.pendingTimeoutSeconds
+      "pod_creation_timeout_seconds" .Values.algorithms.job.podCreationTimeoutSeconds
       "keep_on_shutdown" .Values.algorithms.job.keepOnShutdown)
     "algorithm_pod" (dict
       "resources" .Values.algorithms.resources
